@@ -16,7 +16,7 @@ export default function AdminPage() {
   const [graduates, setGraduates] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // --- ฟังก์ชันจัดการข้อมูล (ย้ายมาไว้ข้างบนเพื่อให้ useEffect เรียกใช้ได้ง่าย) ---
+  // --- ฟังก์ชันจัดการข้อมูล ---
   const fetchGraduates = async () => {
     const { data } = await supabase.from('graduates').select('*').order('student_id');
     if (data) setGraduates(data);
@@ -28,16 +28,16 @@ export default function AdminPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         setUser(session.user);
-        fetchGraduates(); // ถ้ามี session ให้ดึงข้อมูลเลย
+        fetchGraduates();
       }
       setAuthLoading(false);
     };
     checkSession();
   }, []);
 
-  // ⚡️ เพิ่มระบบ Realtime: ถ้ามีใครสแกนเข้างาน ให้หน้า Admin อัปเดตด้วยทันที
+  // ⚡️ ระบบ Realtime
   useEffect(() => {
-    if (!user) return; // ถ้ายังไม่ล็อกอินไม่ต้องทำงาน
+    if (!user) return;
 
     const channel = supabase
       .channel('admin_realtime')
@@ -46,7 +46,7 @@ export default function AdminPage() {
         { event: '*', schema: 'public', table: 'graduates' },
         (payload) => {
           console.log('มีการเปลี่ยนแปลงข้อมูล:', payload);
-          fetchGraduates(); // ดึงข้อมูลใหม่ทันที
+          fetchGraduates();
         }
       )
       .subscribe();
@@ -54,9 +54,9 @@ export default function AdminPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]); // ทำงานเมื่อ user เปลี่ยนสถานะ (เช่น ล็อกอินสำเร็จ)
+  }, [user]);
 
-  // 2. ฟังก์ชันล็อกอิน (ยิงไป Supabase)
+  // 2. ฟังก์ชันล็อกอิน
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthLoading(true);
@@ -101,18 +101,30 @@ export default function AdminPage() {
     reader.readAsBinaryString(file);
   };
 
+  // 🔥🔥🔥 แก้ไขฟังก์ชันลบข้อมูลตรงนี้ 🔥🔥🔥
   const clearAllData = async () => {
+    // 1. ถามยืนยัน
     if(!confirm('⚠️ เตือนครั้งสุดท้าย! ข้อมูลจะหายหมด ยืนยันไหม?')) return;
-    const { error } = await supabase.from('graduates').delete().neq('id', 0);
-    if(!error) fetchGraduates();
+    
+    // 2. สั่งลบด้วยเงื่อนไขที่ใช้ได้กับ ID ทุกประเภท (ทั้งตัวเลขและ UUID)
+    const { error } = await supabase
+      .from('graduates')
+      .delete()
+      .not('id', 'is', null); // ลบทุกแถวที่มี ID
+
+    // 3. เช็คผลลัพธ์
+    if (error) {
+      alert('❌ ลบข้อมูลไม่สำเร็จ: ' + error.message);
+      console.error('Delete Error:', error);
+    } else {
+      alert('✅ ล้างข้อมูลเรียบร้อยแล้ว');
+      setGraduates([]); // สั่งเคลียร์หน้าจอทันที
+    }
   };
 
-  // --- ส่วนแสดงผล (UI) ---
-
-  // ถ้ากำลังโหลดเช็ค Session อย่าเพิ่งโชว์อะไร
+  // --- UI ---
   if (authLoading) return <div className="min-h-screen flex items-center justify-center text-white bg-gray-900">กำลังตรวจสอบสิทธิ์...</div>;
 
-  // ถ้ายังไม่ล็อกอิน -> โชว์ฟอร์ม Login
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
@@ -157,10 +169,8 @@ export default function AdminPage() {
     );
   }
 
-  // ถ้าล็อกอินแล้ว -> โชว์ Dashboard
   return (
     <div className="min-h-screen bg-gray-50 p-8 print:p-0 print:bg-white">
-      {/* Navbar Admin */}
       <div className="mb-8 p-6 bg-white rounded-xl shadow-sm border border-gray-200 print:hidden space-y-4">
         <div className="flex justify-between items-center border-b pb-4 mb-4">
             <div className="flex items-center gap-3">
@@ -176,7 +186,6 @@ export default function AdminPage() {
             </button>
         </div>
         
-        {/* เครื่องมือจัดการ */}
         <div className="flex flex-wrap gap-4 items-center">
           <a href="/scan" target="_blank" className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-sm">
             📸 สแกน QR
@@ -189,7 +198,6 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* อัปโหลด Excel */}
         <div className="mt-4 p-4 border-2 border-dashed border-blue-200 rounded-lg bg-blue-50 flex items-center gap-4">
           <div className="bg-blue-100 p-3 rounded-full text-blue-600">📥</div>
           <div className="flex-1">
@@ -199,7 +207,6 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Grid แสดงรายชื่อ QR Code */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 print:grid-cols-3 print:gap-4">
         {graduates.map((grad) => (
           <div key={grad.id} className="bg-white p-6 rounded-xl shadow-md flex flex-col items-center text-center border border-gray-200 print:shadow-none print:border-black break-inside-avoid">
@@ -210,7 +217,6 @@ export default function AdminPage() {
             </div>
             <p className="mt-3 font-mono font-bold text-lg text-blue-600 bg-blue-50 px-3 py-1 rounded-full">{grad.student_id}</p>
             
-            {/* แสดงสถานะเช็คอิน (จะอัปเดต Realtime) */}
             <div className={`mt-2 text-xs font-bold px-2 py-1 rounded ${grad.status === 'present' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'} transition-all duration-300`}>
               {grad.status === 'present' ? '✅ มาแล้ว' : 'รอเช็คอิน'}
             </div>
