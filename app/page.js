@@ -1,14 +1,18 @@
-'use client';
+'use client'; // ต้องอยู่บรรทัดที่ 1 เสมอ
 
 import { useEffect, useState } from 'react';
 import { supabase } from '../utils/supabase';
 
+// เอา console.log มาไว้ตรงนี้ (ก่อน function Home)
+console.log('Supabase URL Check:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'Loaded' : 'Missing');
+
 export default function Home() {
   const [allGraduates, setAllGraduates] = useState([]); // เก็บข้อมูลทุกคน
   
-  // คำนวณตัวเลข
-  const total = allGraduates.length;
-  const presentList = allGraduates
+  // คำนวณตัวเลข (เพิ่ม ? เพื่อป้องกัน error กรณี allGraduates เป็น null หรือ undefined)
+  const total = allGraduates?.length || 0;
+  
+  const presentList = (allGraduates || [])
     .filter(g => g.status === 'present')
     .sort((a, b) => new Date(b.check_in_at) - new Date(a.check_in_at)); // เรียงคนล่าสุดขึ้นก่อน
   
@@ -17,12 +21,20 @@ export default function Home() {
   const progress = total > 0 ? Math.round((presentCount / total) * 100) : 0;
 
   const fetchGraduates = async () => {
-    const { data, error } = await supabase
-      .from('graduates')
-      .select('*');
+    try {
+      const { data, error } = await supabase
+        .from('graduates')
+        .select('*');
 
-    if (error) console.error('Error:', error);
-    else setAllGraduates(data);
+      if (error) {
+        // *จุดที่แก้: แปลง Error เป็นข้อความเพื่อให้ Console อ่านออก*
+        console.error('Supabase Error Details:', JSON.stringify(error, null, 2));
+      } else {
+        setAllGraduates(data || []);
+      }
+    } catch (err) {
+      console.error('Unexpected Error:', err);
+    }
   };
 
   useEffect(() => {
@@ -92,6 +104,10 @@ export default function Home() {
           <div className="col-span-full py-20 text-center bg-gray-800/50 rounded-2xl border-2 border-dashed border-gray-700">
             <p className="text-gray-500 text-xl">... ยังไม่มีใครรายงานตัว ...</p>
             <p className="text-gray-600 text-sm mt-2">สแกน QR Code เพื่อเริ่มระบบ</p>
+            <div className="mt-4 text-xs text-red-400">
+               {/* ส่วนนี้จะช่วยแสดง Error บนหน้าเว็บถ้ามี (Optional) */}
+               {total === 0 && "ยังไม่พบข้อมูล (ลองเช็ค Console เพื่อดู Error)"}
+            </div>
           </div>
         ) : (
           presentList.map((grad, index) => (
