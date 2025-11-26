@@ -45,8 +45,8 @@ export default function ScanPage() {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'th-TH';
-      utterance.rate = 1.0;
-      utterance.pitch = 0.8;
+      utterance.rate = 0.85; // ปรับให้ช้าลงอีกนิด ให้ดูสง่างาม
+      utterance.pitch = 1.0;
       
       const voices = window.speechSynthesis.getVoices();
       let thaiVoice = voices.find(v => v.lang === 'th-TH' && (v.name.includes('Male') || v.name.includes('Man')));
@@ -108,13 +108,14 @@ export default function ScanPage() {
         .single();
 
       if (searchError || !student) {
-        speak('ไม่พบข้อมูลครับ');
+        speak('ไม่พบรายชื่อในระบบครับ');
         setStatus('error');
         throw new Error('ไม่พบข้อมูล');
       }
 
+      // 1. กรณีเช็คอินไปแล้ว
       if (student.status === 'present') {
-        speak(`เช็คอินไปแล้วครับ.. ${student.fullname}`);
+        speak(`บัณฑิต ${student.fullname} รายงานตัวแล้วครับ`);
         setStatus('error'); 
         setTimeout(() => {
             setStatus('ready');
@@ -123,6 +124,7 @@ export default function ScanPage() {
         return;
       }
 
+      // อัปเดตสถานะ
       const { error: updateError } = await supabase
         .from('graduates')
         .update({ status: 'present', check_in_at: new Date().toISOString() })
@@ -131,18 +133,36 @@ export default function ScanPage() {
       if (updateError) throw updateError;
 
       setStatus('success');
-      speak(`เช็คอินสำเร็จ.. ${student.fullname}`);
+
+      // 🔥 แก้ไขคำขานชื่อตรงนี้ 🔥
+      // 1. จัดการชื่อปริญญา (เติมคำว่า "ปริญญา" ถ้ายังไม่มี)
+      let degreeText = 'บัณฑิต'; 
+      if (student.degree) {
+        if (student.degree.trim().startsWith('ปริญญา')) {
+           degreeText = student.degree;
+        } else {
+           degreeText = `ปริญญา${student.degree}`;
+        }
+      }
+
+      // 2. จัดการชื่อคณะ (เติมคำว่า "คณะ" ถ้ายังไม่มี)
+      const facultyText = student.faculty ? `คณะ${student.faculty}` : ''; 
+      
+      // 3. รวมประโยค: ปริญญา... คณะ... ชื่อ...
+      const speechText = `${degreeText} ${facultyText} ${student.fullname}`;
+      
+      speak(speechText);
 
       setTimeout(() => {
           setStatus('ready');
           isProcessingRef.current = false;
-      }, 3000);
+      }, 5000); // เพิ่มเวลาเป็น 5 วินาที เผื่อชื่อยาว
 
     } catch (err) {
       console.error(err);
       if (status !== 'error') {
          setStatus('error');
-         speak('เกิดข้อผิดพลาดครับ');
+         speak('เกิดข้อผิดพลาดในการบันทึกครับ');
       }
       setTimeout(() => {
           setStatus('ready');
@@ -157,16 +177,11 @@ export default function ScanPage() {
     }
   };
 
-  // ✅ เพิ่มฟังก์ชัน Error Handler (ตัวแก้บั๊ก i is not a function)
   const handleError = (error) => {
     console.warn("Scanner Error:", error);
-    // ไม่ต้องทำอะไรมาก แค่รับไว้ไม่ให้แอปพังก็พอ
   };
 
-  // ------------------------------------------------------------------
-  // UI Section
-  // ------------------------------------------------------------------
-
+  // --- UI Section ---
   if (!isUnlocked) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
@@ -200,7 +215,7 @@ export default function ScanPage() {
         {/* Scanner Component */}
         <Scanner 
             onScan={handleScan} 
-            onError={handleError} // ✅ เพิ่มบรรทัดนี้คือหัวใจสำคัญของการแก้ Error!
+            onError={handleError} 
             formats={['qr_code']} 
             components={{
                 audio: false, 
